@@ -1,19 +1,93 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase, notifyNativeSession } from "../lib/supabase";
+import { GoogleIcon, RelayLogo, ShieldIcon } from "../components/RelayLogo";
+
+type Mode = "signin" | "signup" | "otp";
 
 export default function Login() {
+  const [params] = useSearchParams();
+  const next = params.get("next") || "/";
+
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<"email" | "otp">("email");
+  const [otpSent, setOtpSent] = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  async function sendOtp(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
+  const title = useMemo(() => {
+    if (mode === "signup") return "Create Relay Account";
+    if (mode === "otp") return "Sign in with email code";
+    return "Sign In to Relay";
+  }, [mode]);
+
+  const subtitle = useMemo(() => {
+    if (mode === "signup") return "Sign up with email to build your secure identity.";
+    if (mode === "otp") return "We'll email you a one-time code. No password needed.";
+    return "Enter your email or handle and password.";
+  }, [mode]);
+
+  function clearMessages() {
     setError(null);
     setInfo(null);
+  }
+
+  async function finishSession(access_token: string, refresh_token: string) {
+    notifyNativeSession({ access_token, refresh_token });
+    setInfo("Signed in. You can return to the Relay app.");
+    if (next && next !== "/login" && next.startsWith("/")) {
+      window.setTimeout(() => {
+        window.location.assign(next);
+      }, 600);
+    }
+  }
+
+  async function onPasswordSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    clearMessages();
+    setBusy(true);
+    try {
+      const mail = email.trim();
+      if (mode === "signup") {
+        if (password.length < 8) throw new Error("Password must be at least 8 characters.");
+        if (password !== confirm) throw new Error("Passwords do not match.");
+        const { data, error: err } = await supabase.auth.signUp({
+          email: mail,
+          password,
+          options: { emailRedirectTo: window.location.origin + "/login" },
+        });
+        if (err) throw err;
+        if (data.session) {
+          await finishSession(data.session.access_token, data.session.refresh_token);
+        } else {
+          setInfo("Account created. Check your email to confirm, then sign in.");
+          setMode("signin");
+        }
+      } else {
+        const { data, error: err } = await supabase.auth.signInWithPassword({
+          email: mail,
+          password,
+        });
+        if (err) throw err;
+        if (!data.session) throw new Error("No session returned.");
+        await finishSession(data.session.access_token, data.session.refresh_token);
+      }
+    } catch (err: any) {
+      setError(err?.message || "Authentication failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    clearMessages();
+    setBusy(true);
     try {
       const { error: err } = await supabase.auth.signInWithOtp({
         email: email.trim(),
@@ -23,7 +97,7 @@ export default function Login() {
         },
       });
       if (err) throw err;
-      setStep("otp");
+      setOtpSent(true);
       setInfo("Check your email for a 6-digit code.");
     } catch (err: any) {
       setError(err?.message || "Could not send code.");
@@ -34,8 +108,8 @@ export default function Login() {
 
   async function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
+    clearMessages();
     setBusy(true);
-    setError(null);
     try {
       const { data, error: err } = await supabase.auth.verifyOtp({
         email: email.trim(),
@@ -43,13 +117,8 @@ export default function Login() {
         type: "email",
       });
       if (err) throw err;
-      if (data.session) {
-        notifyNativeSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
-        setInfo("Signed in. You can return to the Relay app.");
-      }
+      if (!data.session) throw new Error("Invalid or expired code.");
+      await finishSession(data.session.access_token, data.session.refresh_token);
     } catch (err: any) {
       setError(err?.message || "Invalid or expired code.");
     } finally {
@@ -57,64 +126,251 @@ export default function Login() {
     }
   }
 
+  async function onGoogle() {
+    clearMessages();
+    setBusy(true);
+    try {
+      const { error: err } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + "/login",
+          queryParams: { access_type: "offline", prompt: "consent" },
+        },
+      });
+      if (err) throw err;
+    } catch (err: any) {
+      setError(err?.message || "Google sign-in failed.");
+      setBusy(false);
+    }
+  }
+
+  async function onForgot() {
+    clearMessages();
+    if (!email.trim()) {
+      setError("Enter your email above first, then tap Forgot password.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin + "/login",
+      });
+      if (err) throw err;
+      setInfo("Password reset email sent if that account exists.");
+    } catch (err: any) {
+      setError(err?.message || "Could not send reset email.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="card">
-      <span className="badge">Email OTP</span>
-      <h1>Sign in to Relay</h1>
-      <p className="muted">
-        We email you a one-time code. No password required for this flow.
-      </p>
+    <div className="identity-card">
+      <div className="logo-wrap">
+        <RelayLogo />
+      </div>
+      <div className="badge-row">
+        <span className="badge">
+          <ShieldIcon />
+          Relay Identity System
+        </span>
+      </div>
+
+      <h1>{title}</h1>
+      <p className="subtitle">{subtitle}</p>
+
       {error && <div className="err">{error}</div>}
       {info && <div className="ok-box">{info}</div>}
 
-      {step === "email" ? (
-        <form onSubmit={sendOtp}>
+      <div className="tabs-mini">
+        <button
+          type="button"
+          className={mode === "signin" || mode === "signup" ? "active" : ""}
+          onClick={() => {
+            setMode(mode === "signup" ? "signup" : "signin");
+            clearMessages();
+            setOtpSent(false);
+          }}
+        >
+          Password
+        </button>
+        <button
+          type="button"
+          className={mode === "otp" ? "active" : ""}
+          onClick={() => {
+            setMode("otp");
+            clearMessages();
+          }}
+        >
+          Email code
+        </button>
+      </div>
+
+      {mode === "otp" ? (
+        !otpSent ? (
+          <form onSubmit={sendOtp}>
+            <div className="field">
+              <label>Email address</label>
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </div>
+            <button className="btn btn-primary" disabled={busy} type="submit">
+              {busy ? "Sending…" : "Send code"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={verifyOtp}>
+            <p className="otp-hint">Code sent to {email}</p>
+            <div className="field">
+              <label>One-time code</label>
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={8}
+                required
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                placeholder="6-digit code"
+              />
+            </div>
+            <button className="btn btn-primary" disabled={busy} type="submit">
+              {busy ? "Verifying…" : "Verify & continue"}
+            </button>
+            <button
+              type="button"
+              className="link-btn"
+              style={{ marginTop: 14 }}
+              disabled={busy}
+              onClick={() => {
+                setOtpSent(false);
+                setOtp("");
+                clearMessages();
+              }}
+            >
+              Use a different email
+            </button>
+          </form>
+        )
+      ) : (
+        <form onSubmit={onPasswordSubmit}>
           <div className="field">
-            <label>Email</label>
+            <label>{mode === "signup" ? "Email address" : "Email or username handle"}</label>
             <input
               type="email"
               required
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder={mode === "signup" ? "you@example.com" : "you@example.com or @handle"}
             />
           </div>
-          <button className="btn" disabled={busy} type="submit">
-            {busy ? "Sending…" : "Send code"}
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={verifyOtp}>
+
           <div className="field">
-            <label>Code sent to {email}</label>
-            <input
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={8}
-              required
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              placeholder="6-digit code"
-            />
+            <label>Password</label>
+            <div className="password-wrap">
+              <input
+                type={showPw ? "text" : "password"}
+                required
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === "signup" ? "Minimum 8 characters" : "Your account password"}
+                minLength={mode === "signup" ? 8 : undefined}
+              />
+              <button
+                type="button"
+                className="toggle-eye"
+                aria-label={showPw ? "Hide password" : "Show password"}
+                onClick={() => setShowPw((v) => !v)}
+              >
+                {showPw ? "Hide" : "Show"}
+              </button>
+            </div>
           </div>
-          <button className="btn" disabled={busy} type="submit">
-            {busy ? "Verifying…" : "Verify & continue"}
-          </button>
-          <button
-            type="button"
-            className="btn secondary"
-            disabled={busy}
-            onClick={() => {
-              setStep("email");
-              setOtp("");
-              setInfo(null);
-            }}
-          >
-            Use a different email
+
+          {mode === "signup" && (
+            <div className="field">
+              <label>Confirm password</label>
+              <input
+                type={showPw ? "text" : "password"}
+                required
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="Repeat password"
+                minLength={8}
+              />
+            </div>
+          )}
+
+          {mode === "signin" && (
+            <div className="row-between">
+              <button type="button" className="link-btn" onClick={onForgot} disabled={busy}>
+                Forgot password?
+              </button>
+            </div>
+          )}
+
+          <button className="btn btn-primary" disabled={busy} type="submit">
+            {busy
+              ? mode === "signup"
+                ? "Creating…"
+                : "Signing in…"
+              : mode === "signup"
+                ? "Create Account"
+                : "Sign In"}
           </button>
         </form>
       )}
+
+      <div className="divider">or</div>
+
+      <button type="button" className="btn btn-google" disabled={busy} onClick={onGoogle}>
+        <GoogleIcon />
+        Continue with Google
+      </button>
+
+      <p className="footer-switch">
+        {mode === "signup" ? (
+          <>
+            Already have an account?{" "}
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                setMode("signin");
+                clearMessages();
+              }}
+            >
+              Sign in
+            </button>
+          </>
+        ) : (
+          <>
+            Don't have an account?{" "}
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                setMode("signup");
+                clearMessages();
+              }}
+            >
+              Create account
+            </button>
+          </>
+        )}
+      </p>
+
+      <p className="meta">
+        Powered by Supabase Auth · <Link to="/">Home</Link>
+      </p>
     </div>
   );
 }

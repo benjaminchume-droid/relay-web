@@ -7,6 +7,7 @@ import {
   type InviteKind,
   type InvitePreview,
 } from "../lib/invites";
+import { RelayLogo, ShieldIcon } from "../components/RelayLogo";
 
 export default function InvitePage({ kind }: { kind: InviteKind }) {
   const { token = "" } = useParams();
@@ -66,17 +67,23 @@ export default function InvitePage({ kind }: { kind: InviteKind }) {
 
   if (loading) {
     return (
-      <div className="card">
-        <p className="muted">Loading invite…</p>
+      <div className="identity-card">
+        <div className="logo-wrap">
+          <RelayLogo size={48} />
+        </div>
+        <p className="subtitle">Loading invite…</p>
       </div>
     );
   }
 
   if (!preview) {
     return (
-      <div className="card">
+      <div className="identity-card">
+        <div className="logo-wrap">
+          <RelayLogo size={48} />
+        </div>
         <div className="err">{error || "Invite not found"}</div>
-        <Link to="/" className="btn secondary" style={{ display: "block", textAlign: "center" }}>
+        <Link to="/" className="btn btn-primary" style={{ display: "block" }}>
           Home
         </Link>
       </div>
@@ -84,20 +91,33 @@ export default function InvitePage({ kind }: { kind: InviteKind }) {
   }
 
   return (
-    <div className="card">
-      <span className="badge">{preview.kind} invite</span>
+    <div className="identity-card">
+      <div className="logo-wrap">
+        <RelayLogo size={48} />
+      </div>
+      <div className="badge-row">
+        <span className="badge">
+          <ShieldIcon />
+          {preview.kind} invite
+        </span>
+      </div>
+
       {preview.avatarUrl ? (
         <img className="avatar" src={preview.avatarUrl} alt="" />
       ) : (
-        <div className="avatar" style={{ display: "grid", placeItems: "center", fontWeight: 700 }}>
+        <div className="avatar avatar-fallback">
           {(preview.name || "?").slice(0, 1).toUpperCase()}
         </div>
       )}
+
       <h1>{preview.name}</h1>
-      {preview.description && <p className="muted">{preview.description}</p>}
+      {preview.description && <p className="subtitle">{preview.description}</p>}
       {preview.memberCount != null && (
-        <p className="muted">{preview.memberCount} members</p>
+        <p className="subtitle" style={{ marginTop: -12 }}>
+          {preview.memberCount} members
+        </p>
       )}
+
       {error && <div className="err">{error}</div>}
       {success && <div className="ok-box">{success}</div>}
       {!preview.valid && (
@@ -108,17 +128,17 @@ export default function InvitePage({ kind }: { kind: InviteKind }) {
         <>
           {!signedIn ? (
             <>
-              <p className="muted">Sign in to join this {preview.kind}.</p>
+              <p className="subtitle">Sign in to join this {preview.kind}.</p>
               <Link
                 to={`/login?next=${encodeURIComponent(window.location.pathname)}`}
-                className="btn"
-                style={{ display: "block", textAlign: "center" }}
+                className="btn btn-primary"
+                style={{ display: "block" }}
               >
-                Sign in with OTP
+                Sign In to Relay
               </Link>
             </>
           ) : (
-            <button className="btn ok" disabled={busy} onClick={onJoin}>
+            <button className="btn btn-primary" disabled={busy} onClick={onJoin}>
               {busy ? "Joining…" : `Join ${preview.kind}`}
             </button>
           )}
@@ -126,7 +146,7 @@ export default function InvitePage({ kind }: { kind: InviteKind }) {
       )}
 
       <p className="meta">
-        Token: <code>{token}</code>
+        Token <code>{token}</code>
       </p>
     </div>
   );

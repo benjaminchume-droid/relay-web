@@ -1,15 +1,27 @@
-import { Routes, Route, Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import InvitePage from "./pages/InvitePage";
+import { supabase, notifyNativeSession } from "./lib/supabase";
 
 export default function App() {
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        notifyNativeSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   return (
     <div className="shell">
-      <Link to="/" className="logo">
-        <span className="logo-mark">R</span>
-        RELAY
-      </Link>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
