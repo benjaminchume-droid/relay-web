@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase, notifyNativeSession } from "../lib/supabase";
-import { GoogleIcon, RelayLogo, ShieldIcon } from "../components/RelayLogo";
+import { EyeIcon, GoogleIcon, RelayLogo, ShieldIcon } from "../components/RelayLogo";
 
 type Mode = "signin" | "signup" | "otp";
 
@@ -167,12 +167,12 @@ export default function Login() {
   return (
     <div className="identity-card">
       <div className="logo-wrap">
-        <RelayLogo />
+        <RelayLogo size={56} />
       </div>
       <div className="badge-row">
         <span className="badge">
           <ShieldIcon />
-          Relay Identity System
+          RELAY IDENTITY SYSTEM
         </span>
       </div>
 
@@ -182,35 +182,11 @@ export default function Login() {
       {error && <div className="err">{error}</div>}
       {info && <div className="ok-box">{info}</div>}
 
-      <div className="tabs-mini">
-        <button
-          type="button"
-          className={mode === "signin" || mode === "signup" ? "active" : ""}
-          onClick={() => {
-            setMode(mode === "signup" ? "signup" : "signin");
-            clearMessages();
-            setOtpSent(false);
-          }}
-        >
-          Password
-        </button>
-        <button
-          type="button"
-          className={mode === "otp" ? "active" : ""}
-          onClick={() => {
-            setMode("otp");
-            clearMessages();
-          }}
-        >
-          Email code
-        </button>
-      </div>
-
       {mode === "otp" ? (
         !otpSent ? (
           <form onSubmit={sendOtp}>
             <div className="field">
-              <label>Email address</label>
+              <label>EMAIL ADDRESS</label>
               <input
                 type="email"
                 required
@@ -223,12 +199,23 @@ export default function Login() {
             <button className="btn btn-primary" disabled={busy} type="submit">
               {busy ? "Sending…" : "Send code"}
             </button>
+            <button
+              type="button"
+              className="link-btn"
+              style={{ marginTop: 16 }}
+              onClick={() => {
+                setMode("signin");
+                clearMessages();
+              }}
+            >
+              Back to password sign in
+            </button>
           </form>
         ) : (
           <form onSubmit={verifyOtp}>
             <p className="otp-hint">Code sent to {email}</p>
             <div className="field">
-              <label>One-time code</label>
+              <label>ONE-TIME CODE</label>
               <input
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -260,7 +247,7 @@ export default function Login() {
       ) : (
         <form onSubmit={onPasswordSubmit}>
           <div className="field">
-            <label>{mode === "signup" ? "Email address" : "Email or username handle"}</label>
+            <label>{mode === "signup" ? "EMAIL ADDRESS" : "EMAIL OR USERNAME HANDLE"}</label>
             <input
               type="email"
               required
@@ -272,7 +259,7 @@ export default function Login() {
           </div>
 
           <div className="field">
-            <label>Password</label>
+            <label>PASSWORD</label>
             <div className="password-wrap">
               <input
                 type={showPw ? "text" : "password"}
@@ -289,14 +276,14 @@ export default function Login() {
                 aria-label={showPw ? "Hide password" : "Show password"}
                 onClick={() => setShowPw((v) => !v)}
               >
-                {showPw ? "Hide" : "Show"}
+                <EyeIcon open={showPw} />
               </button>
             </div>
           </div>
 
           {mode === "signup" && (
             <div className="field">
-              <label>Confirm password</label>
+              <label>CONFIRM PASSWORD</label>
               <input
                 type={showPw ? "text" : "password"}
                 required
@@ -329,12 +316,29 @@ export default function Login() {
         </form>
       )}
 
-      <div className="divider">or</div>
+      {mode !== "otp" && (
+        <>
+          <div className="divider">or</div>
 
-      <button type="button" className="btn btn-google" disabled={busy} onClick={onGoogle}>
-        <GoogleIcon />
-        Continue with Google
-      </button>
+          <button type="button" className="btn btn-google" disabled={busy} onClick={onGoogle}>
+            <GoogleIcon />
+            Continue with Google
+          </button>
+
+          <button
+            type="button"
+            className="link-btn otp-entry"
+            disabled={busy}
+            onClick={() => {
+              setMode("otp");
+              clearMessages();
+              setOtpSent(false);
+            }}
+          >
+            Sign in with email code instead
+          </button>
+        </>
+      )}
 
       <p className="footer-switch">
         {mode === "signup" ? (
@@ -351,9 +355,9 @@ export default function Login() {
               Sign in
             </button>
           </>
-        ) : (
+        ) : mode === "signin" ? (
           <>
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <button
               type="button"
               className="link-btn"
@@ -365,11 +369,11 @@ export default function Login() {
               Create account
             </button>
           </>
-        )}
+        ) : null}
       </p>
 
       <p className="meta">
-        Powered by Supabase Auth · <Link to="/">Home</Link>
+        Powered by Supabase · <Link to="/">Home</Link>
       </p>
     </div>
   );
